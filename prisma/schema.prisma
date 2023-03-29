@@ -1,0 +1,32 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id     String @id @default(auto()) @map("_id") @db.ObjectId
+  name   String @db.String
+  chatId Float? @unique @db.Double
+
+  meetingIDs String[]  @db.ObjectId
+  meetings   Meeting[] @relation(fields: [meetingIDs], references: [id])
+
+  @@map("users")
+}
+
+model Meeting {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  topic      String    @db.String
+  start_time DateTime? @db.Date
+  duration   Float?    @default(40) @db.Double
+  start_url  String    @db.String
+
+  userIDs String[] @db.ObjectId
+  users   User[]   @relation(fields: [userIDs], references: [id])
+
+  @@map("meetings")
+}
