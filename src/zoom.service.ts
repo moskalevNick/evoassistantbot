@@ -1,24 +1,32 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import zoomApi from 'zoomapi';
 import { PrismaService } from './prisma/prisma.service';
 
-type zoomServiceTyp = {
+type zoomServiceType = {
   start_time: number;
   duration?: number;
   userChatIds: number[];
   topic: string;
 };
 
+type zoomServiceEditType = {
+  meetingId: string;
+  duration?: number;
+  userIDs?: string[];
+  topic?: string;
+};
+
 @Injectable()
 export class ZoomService {
   constructor(private prisma: PrismaService) {}
+
   async newMeeting({
     start_time,
     duration = 40,
     userChatIds,
     topic,
-  }: zoomServiceTyp) {
+  }: zoomServiceType) {
     const client = zoomApi({
       apiKey: process.env.ZOOM_API_KEY,
       apiSecret: process.env.ZOOM_API_SECRET,
@@ -53,6 +61,33 @@ export class ZoomService {
 
     return this.prisma.meeting.create({
       data,
+    });
+  }
+
+  async editMeet({ meetingId, duration, userIDs, topic }: zoomServiceEditType) {
+    const users: User[] = [];
+
+    for (const userId of userIDs) {
+      const user = await this.prisma.user.findFirst({
+        where: {
+          id: userId,
+        },
+      });
+
+      if (user) {
+        users.push(user);
+      }
+    }
+
+    const data: Prisma.MeetingUncheckedUpdateInput = {
+      duration,
+      userIDs,
+      topic,
+    };
+
+    await this.prisma.meeting.update({
+      where: { id: meetingId },
+      data: { ...data },
     });
   }
 }
