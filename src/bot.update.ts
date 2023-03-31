@@ -168,8 +168,8 @@ export class BotUpdate {
   async generalMeeting(ctx: Context) {
     const chat = await ctx.getChat();
 
-    const collegues: User[] = await this.prisma.user.findMany();
-    // const collegues = users.filter((collegue) => collegue.chatId !== chat.id);
+    const users: User[] = await this.prisma.user.findMany();
+    let collegues = users.filter((collegue) => collegue.chatId !== chat.id);
     await this.bot.telegram.sendMessage(chat.id, 'Напишите тему совещания');
 
     this.isGeneralMeetingTheme = true;
@@ -199,6 +199,30 @@ export class BotUpdate {
           const dateTimeArr = newGeneralMeetingDate.split(' ');
           const timeArr = dateTimeArr[2].split(':');
 
+          const days_in_month =
+            32 -
+            new Date(
+              new Date().getFullYear(),
+              this.monthArr.indexOf(dateTimeArr[1]),
+              32,
+            ).getDate();
+
+          if (days_in_month < Number(dateTimeArr[0])) {
+            await this.bot.telegram.sendMessage(
+              chat.id,
+              `Неправильное число месяца`,
+            );
+            return;
+          }
+
+          if (timeArr[0] > 23 || timeArr[1] > 59) {
+            await this.bot.telegram.sendMessage(
+              chat.id,
+              `Неправильное значение времени`,
+            );
+            return;
+          }
+
           this.readableDate = new Date(
             Number(new Date().getFullYear()),
             Number(this.monthArr.indexOf(dateTimeArr[1])),
@@ -219,6 +243,13 @@ export class BotUpdate {
           });
 
           this.generalMeet = newMeet;
+
+          collegues.push({
+            id: '0',
+            name: 'Завершить добавление',
+            chatId: 0,
+            meetingIDs: [],
+          });
 
           if (collegues.length) {
             await this.bot.telegram.sendMessage(
@@ -254,6 +285,24 @@ export class BotUpdate {
         id: this.generalMeet.id,
       },
     });
+
+    if (ctx.match[1] === '0') {
+      await this.bot.telegram.sendMessage(
+        chat.id,
+        `<b>Совещание ${currentMeeting.start_time.toLocaleDateString('ru-RU', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })}</b>
+        \n<b>Тема</b>: ${currentMeeting.topic}
+        \n<b>Cсылка</b>: <a href="${currentMeeting.start_url}">🔗</a>`,
+        { parse_mode: 'HTML' },
+      );
+      return;
+    }
 
     const currentUser = await this.prisma.user.findFirst({
       where: {
@@ -599,6 +648,11 @@ export class BotUpdate {
       },
     });
 
+    if (userMeetings.length === 0) {
+      await this.bot.telegram.sendMessage(chat.id, `У вас пока нет совещаний`);
+      return;
+    }
+
     await this.bot.telegram.sendMessage(
       chat.id,
       `У вас ${userMeetings.length} совещаний: `,
@@ -615,14 +669,16 @@ export class BotUpdate {
             id: userID,
           },
         });
-        opponentNamesString = opponentNamesString + `${opponent.name}, `;
+        if (opponent.chatId !== chat.id) {
+          opponentNamesString = opponentNamesString + `${opponent?.name}, `;
+        }
       }
 
       message =
         message +
         `${
           index + 1
-        }) <b>Совещание с ${opponentNamesString} ${meeting.start_time.toLocaleDateString(
+        }) <b>Совещание c ${opponentNamesString} ${meeting.start_time.toLocaleDateString(
           'ru-RU',
           {
             year: 'numeric',
