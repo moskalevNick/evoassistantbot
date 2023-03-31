@@ -148,14 +148,16 @@ export class BotUpdate {
       await this.bot.telegram.sendMessage(
         chat.id,
         'Сделайте выбор: ',
-        Markup.inlineKeyboard([
+        Markup.inlineKeyboard(
           collegues.map((collegue) =>
-            Markup.button.callback(
-              `${collegue.name}`,
-              `requestMeeting-${collegue.chatId}`,
+            Array(
+              Markup.button.callback(
+                `${collegue.name}`,
+                `requestMeeting-${collegue.chatId}`,
+              ),
             ),
           ),
-        ]),
+        ),
       );
     } else {
       await this.bot.telegram.sendMessage(chat.id, 'Коллеги не найдены');
@@ -166,9 +168,8 @@ export class BotUpdate {
   async generalMeeting(ctx: Context) {
     const chat = await ctx.getChat();
 
-    const users: User[] = await this.prisma.user.findMany();
-    const collegues = users.filter((collegue) => collegue.chatId !== chat.id);
-
+    const collegues: User[] = await this.prisma.user.findMany();
+    // const collegues = users.filter((collegue) => collegue.chatId !== chat.id);
     await this.bot.telegram.sendMessage(chat.id, 'Напишите тему совещания');
 
     this.isGeneralMeetingTheme = true;
@@ -223,14 +224,16 @@ export class BotUpdate {
             await this.bot.telegram.sendMessage(
               chat.id,
               'Добавить коллег на совещание: ',
-              Markup.inlineKeyboard([
+              Markup.inlineKeyboard(
                 collegues.map((collegue) =>
-                  Markup.button.callback(
-                    `${collegue.name}`,
-                    `requestAddToGeneralMeeting-${collegue.chatId}`,
+                  Array(
+                    Markup.button.callback(
+                      `${collegue.name}`,
+                      `requestAddToGeneralMeeting-${collegue.chatId}`,
+                    ),
                   ),
                 ),
-              ]),
+              ),
             );
           } else {
             await this.bot.telegram.sendMessage(chat.id, 'Список пуст');
@@ -591,6 +594,9 @@ export class BotUpdate {
         userIDs: { hasSome: currentUser.id },
         start_time: { gt: new Date() },
       },
+      orderBy: {
+        start_time: 'asc',
+      },
     });
 
     await this.bot.telegram.sendMessage(
@@ -598,13 +604,9 @@ export class BotUpdate {
       `У вас ${userMeetings.length} совещаний: `,
     );
 
-    // const sortesMeetings = userMeetings.sort((a, b) => {
-    //   console.log(Number(a.start_time) - Number(b.start_time));
+    let message: string = '';
 
-    //   return Number(a.start_time) - Number(b.start_time);
-    // });
-
-    userMeetings.forEach(async (meeting) => {
+    for (const [index, meeting] of userMeetings.entries()) {
       let opponentNamesString: string = '';
 
       for (const userID of meeting.userIDs) {
@@ -616,9 +618,11 @@ export class BotUpdate {
         opponentNamesString = opponentNamesString + `${opponent.name}, `;
       }
 
-      await this.bot.telegram.sendMessage(
-        chat.id,
-        `<b>Совещание с ${opponentNamesString} ${meeting.start_time.toLocaleDateString(
+      message =
+        message +
+        `${
+          index + 1
+        }) <b>Совещание с ${opponentNamesString} ${meeting.start_time.toLocaleDateString(
           'ru-RU',
           {
             year: 'numeric',
@@ -629,14 +633,16 @@ export class BotUpdate {
           hour: '2-digit',
           minute: '2-digit',
         })}</b>
-        \nТема: ${meeting.topic}
-        \n${
-          meeting.start_url
-            ? `Cсылка: <a href="${meeting.start_url}">🔗</a>`
-            : 'Личная встреча'
-        }`,
-        { parse_mode: 'HTML' },
-      );
+          \nТема: ${meeting.topic}
+          \n${
+            meeting.start_url
+              ? `Cсылка: <a href="${meeting.start_url}">🔗</a>`
+              : 'Личная встреча'
+          }\n\n\n`;
+    }
+
+    await this.bot.telegram.sendMessage(chat.id, message, {
+      parse_mode: 'HTML',
     });
   }
 
