@@ -302,42 +302,42 @@ export class BotUpdate {
         { parse_mode: 'HTML' },
       );
       return;
-    }
-
-    const currentUser = await this.prisma.user.findFirst({
-      where: {
-        chatId: Number(this.requestMeetToChatId),
-      },
-    });
-
-    if (currentMeeting) {
-      await this.zoomService.editMeet({
-        meetingId: this.generalMeet.id,
-        userIDs: [...currentMeeting.userIDs, currentUser.id],
+    } else {
+      const currentUser = await this.prisma.user.findFirst({
+        where: {
+          chatId: Number(this.requestMeetToChatId),
+        },
       });
 
-      await this.bot.telegram.sendMessage(
-        chat.id,
-        `${currentUser.name} добавлен на совещание на тему ${currentMeeting.topic}`,
-      );
+      if (currentMeeting) {
+        await this.zoomService.editMeet({
+          meetingId: this.generalMeet.id,
+          userIDs: [...currentMeeting.userIDs, currentUser.id],
+        });
 
-      await this.bot.telegram.sendMessage(
-        currentUser.chatId,
-        `<b>Вас добавили на совещание ${currentMeeting.start_time.toLocaleDateString(
-          'ru-RU',
-          {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          },
-        )} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })}</b>
+        await this.bot.telegram.sendMessage(
+          chat.id,
+          `${currentUser.name} добавлен на совещание на тему ${currentMeeting.topic}`,
+        );
+
+        await this.bot.telegram.sendMessage(
+          currentUser.chatId,
+          `<b>Вас добавили на совещание ${currentMeeting.start_time.toLocaleDateString(
+            'ru-RU',
+            {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            },
+          )} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}</b>
         \n<b>Тема</b>: ${currentMeeting.topic}
         \n<b>Cсылка</b>: <a href="${currentMeeting.start_url}">🔗</a>`,
-        { parse_mode: 'HTML' },
-      );
+          { parse_mode: 'HTML' },
+        );
+      }
     }
   }
 
