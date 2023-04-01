@@ -168,120 +168,14 @@ export class BotUpdate {
   async generalMeeting(ctx: Context) {
     const chat = await ctx.getChat();
 
-    const users: User[] = await this.prisma.user.findMany();
-    let collegues = users.filter((collegue) => collegue.chatId !== chat.id);
     await this.bot.telegram.sendMessage(chat.id, 'Напишите тему совещания');
 
     this.isGeneralMeetingTheme = true;
-    this.requestMeetFrom = chat.id;
+    this.requestMeetFrom = chat;
 
-    this.bot.on(message(), async (ctx: any) => {
-      if (this.isGeneralMeetingTheme) {
-        this.generalMeetingTheme = ctx.update.message.text;
+    // this.bot.on(message(), async (ctx: any) => {
 
-        await this.bot.telegram.sendMessage(
-          this.requestMeetFrom.id,
-          `Тема для общего совещания ${this.generalMeetingTheme}`,
-        );
-
-        this.isGeneralMeetingTheme = false;
-
-        await this.bot.telegram.sendMessage(
-          this.requestMeetFrom.id,
-          'Напишите дату общего собрания в формате 27 марта 12:00',
-        );
-
-        this.isGeneralMeetingDate = true;
-        return;
-      } else if (this.isGeneralMeetingDate) {
-        const newGeneralMeetingDate = ctx.update.message.text;
-
-        try {
-          const dateTimeArr = newGeneralMeetingDate.split(' ');
-          const timeArr = dateTimeArr[2].split(':');
-
-          const days_in_month =
-            32 -
-            new Date(
-              new Date().getFullYear(),
-              this.monthArr.indexOf(dateTimeArr[1]),
-              32,
-            ).getDate();
-
-          if (days_in_month < Number(dateTimeArr[0])) {
-            await this.bot.telegram.sendMessage(
-              this.requestMeetFrom.id,
-              `Неправильное число месяца`,
-            );
-            return;
-          }
-
-          if (timeArr[0] > 23 || timeArr[1] > 59) {
-            await this.bot.telegram.sendMessage(
-              this.requestMeetFrom.id,
-              `Неправильное значение времени`,
-            );
-            return;
-          }
-
-          this.readableDate = new Date(
-            Number(new Date().getFullYear()),
-            Number(this.monthArr.indexOf(dateTimeArr[1])),
-            Number(dateTimeArr[0]),
-          ).setHours(Number(timeArr[0]) + 3, Number(timeArr[1]));
-        } catch (e) {
-          await this.bot.telegram.sendMessage(
-            this.requestMeetFrom.id,
-            `Неверный формат даты`,
-          );
-          return;
-        }
-        if (this.readableDate < Number(new Date())) {
-          await this.bot.telegram.sendMessage(
-            this.requestMeetFrom.id,
-            `Дата прошла`,
-          );
-          return;
-        } else {
-          const newMeet = await this.zoomService.newMeeting({
-            start_time: this.readableDate,
-            userChatIds: [this.requestMeetFrom.id],
-            topic: this.generalMeetingTheme,
-          });
-
-          this.generalMeet = newMeet;
-
-          collegues.push({
-            id: '0',
-            name: 'Завершить добавление',
-            chatId: 0,
-            meetingIDs: [],
-          });
-
-          if (collegues.length) {
-            await this.bot.telegram.sendMessage(
-              this.requestMeetFrom.id,
-              'Добавить коллег на совещание: ',
-              Markup.inlineKeyboard(
-                collegues.map((collegue) =>
-                  Array(
-                    Markup.button.callback(
-                      `${collegue.name}`,
-                      `requestAddToGeneralMeeting-${collegue.chatId}`,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          } else {
-            await this.bot.telegram.sendMessage(
-              this.requestMeetFrom.id,
-              'Список пуст',
-            );
-          }
-        }
-      }
-    });
+    // });
   }
 
   @Action(/^requestAddToGeneralMeeting-(\d+)$/)
@@ -296,14 +190,33 @@ export class BotUpdate {
       },
     });
 
-    if (ctx.match[1] === '0') {
+    const currentUser = await this.prisma.user.findFirst({
+      where: {
+        chatId: Number(this.requestMeetToChatId),
+      },
+    });
+
+    if (currentMeeting) {
+      await this.zoomService.editMeet({
+        meetingId: this.generalMeet.id,
+        userIDs: [...currentMeeting.userIDs, currentUser.id],
+      });
+
       await this.bot.telegram.sendMessage(
         chat.id,
-        `<b>Совещание ${currentMeeting.start_time.toLocaleDateString('ru-RU', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
+        `${currentUser.name} добавлен на совещание на тему ${currentMeeting.topic}`,
+      );
+
+      await this.bot.telegram.sendMessage(
+        currentUser.chatId,
+        `<b>Вас добавили на совещание ${currentMeeting.start_time.toLocaleDateString(
+          'ru-RU',
+          {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          },
+        )} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
           hour: '2-digit',
           minute: '2-digit',
         })}</b>
@@ -311,44 +224,34 @@ export class BotUpdate {
         \n<b>Cсылка</b>: <a href="${currentMeeting.start_url}">🔗</a>`,
         { parse_mode: 'HTML' },
       );
-      return;
-    } else {
-      const currentUser = await this.prisma.user.findFirst({
-        where: {
-          chatId: Number(this.requestMeetToChatId),
-        },
-      });
+    }
+  }
 
-      if (currentMeeting) {
-        await this.zoomService.editMeet({
-          meetingId: this.generalMeet.id,
-          userIDs: [...currentMeeting.userIDs, currentUser.id],
-        });
+  @Action('getLinkGeneralMeeting')
+  async getLinkGeneralMeeting(ctx: any) {
+    const chat = await ctx.getChat();
 
-        await this.bot.telegram.sendMessage(
-          chat.id,
-          `${currentUser.name} добавлен на совещание на тему ${currentMeeting.topic}`,
-        );
+    const currentMeeting = await this.prisma.meeting.findFirst({
+      where: {
+        id: this.generalMeet.id,
+      },
+    });
 
-        await this.bot.telegram.sendMessage(
-          currentUser.chatId,
-          `<b>Вас добавили на совещание ${currentMeeting.start_time.toLocaleDateString(
-            'ru-RU',
-            {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            },
-          )} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}</b>
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `<b>Совещание ${currentMeeting.start_time.toLocaleDateString('ru-RU', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}</b>
         \n<b>Тема</b>: ${currentMeeting.topic}
         \n<b>Cсылка</b>: <a href="${currentMeeting.start_url}">🔗</a>`,
-          { parse_mode: 'HTML' },
-        );
-      }
-    }
+      { parse_mode: 'HTML' },
+    );
+    return;
   }
 
   @Action(/^requestMeeting-(\d+)$/)
@@ -362,6 +265,7 @@ export class BotUpdate {
     this.isMeetingTheme = true;
 
     this.bot.on(message(), async (ctx: any) => {
+      const chat = await ctx.getChat();
       if (this.isMeetingTheme) {
         this.meetingTheme = ctx.update.message.text;
 
@@ -392,6 +296,8 @@ export class BotUpdate {
             Number(dateTimeArr[0]),
           ).setHours(Number(timeArr[0]) + 3, Number(timeArr[1]));
         } catch (e) {
+          console.log('415');
+
           await this.bot.telegram.sendMessage(chat.id, `Неверный формат даты`);
           return;
         }
@@ -429,6 +335,8 @@ export class BotUpdate {
             Number(dateTimeArr[0]),
           ).setHours(Number(timeArr[0]) + 3, Number(timeArr[1]));
         } catch (e) {
+          console.log('450');
+
           await this.bot.telegram.sendMessage(chat.id, `Неверный формат даты`);
           return;
         }
@@ -453,6 +361,123 @@ export class BotUpdate {
         }
 
         this.isSecondRequest = false;
+      } else {
+        const users: User[] = await this.prisma.user.findMany();
+
+        let collegues = users.filter((collegue) => collegue.chatId !== chat.id);
+
+        collegues.push({
+          id: '0',
+          name: 'Завершить добавление',
+          chatId: 0,
+          meetingIDs: [],
+        });
+
+        if (this.isGeneralMeetingTheme) {
+          this.generalMeetingTheme = ctx.update.message.text;
+
+          await this.bot.telegram.sendMessage(
+            this.requestMeetFrom.id,
+            `Тема для общего совещания ${this.generalMeetingTheme}`,
+          );
+
+          this.isGeneralMeetingTheme = false;
+
+          await this.bot.telegram.sendMessage(
+            this.requestMeetFrom.id,
+            'Напишите дату общего собрания в формате 27 марта 12:00',
+          );
+
+          this.isGeneralMeetingDate = true;
+          return;
+        } else if (this.isGeneralMeetingDate) {
+          const newGeneralMeetingDate = ctx.update.message.text;
+
+          try {
+            const dateTimeArr = newGeneralMeetingDate.split(' ');
+            const timeArr = dateTimeArr[2].split(':');
+
+            const days_in_month =
+              32 -
+              new Date(
+                new Date().getFullYear(),
+                this.monthArr.indexOf(dateTimeArr[1]),
+                32,
+              ).getDate();
+
+            if (days_in_month < Number(dateTimeArr[0])) {
+              await this.bot.telegram.sendMessage(
+                this.requestMeetFrom.id,
+                `Неправильное число месяца`,
+              );
+              return;
+            }
+
+            if (timeArr[0] > 23 || timeArr[1] > 59) {
+              await this.bot.telegram.sendMessage(
+                this.requestMeetFrom.id,
+                `Неправильное значение времени`,
+              );
+              return;
+            }
+
+            this.readableDate = new Date(
+              Number(new Date().getFullYear()),
+              Number(this.monthArr.indexOf(dateTimeArr[1])),
+              Number(dateTimeArr[0]),
+            ).setHours(Number(timeArr[0]) + 3, Number(timeArr[1]));
+          } catch (e) {
+            console.log('243');
+
+            await this.bot.telegram.sendMessage(
+              this.requestMeetFrom.id,
+              `Неверный формат даты`,
+            );
+            return;
+          }
+          if (this.readableDate < Number(new Date())) {
+            await this.bot.telegram.sendMessage(
+              this.requestMeetFrom.id,
+              `Дата прошла`,
+            );
+            return;
+          } else {
+            const newMeet = await this.zoomService.newMeeting({
+              start_time: this.readableDate,
+              userChatIds: [this.requestMeetFrom.id],
+              topic: this.generalMeetingTheme,
+            });
+
+            this.generalMeet = newMeet;
+            this.isGeneralMeetingDate = false;
+
+            if (collegues.length) {
+              await this.bot.telegram.sendMessage(
+                this.requestMeetFrom.id,
+                'Добавить коллег на совещание: ',
+                Markup.inlineKeyboard(
+                  collegues.map((collegue) =>
+                    Array(
+                      Markup.button.callback(
+                        `${collegue.name}`,
+                        `${
+                          collegue.id === '0'
+                            ? `getLinkGeneralMeeting`
+                            : `requestAddToGeneralMeeting-${collegue.chatId}`
+                        }`,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            } else {
+              await this.bot.telegram.sendMessage(
+                this.requestMeetFrom.id,
+                'Список пуст',
+              );
+            }
+          }
+        }
       }
       this.isFirstRequest = false;
       this.isSecondRequest = false;
@@ -679,7 +704,7 @@ export class BotUpdate {
             id: userID,
           },
         });
-        if (opponent.chatId !== chat.id) {
+        if (opponent && opponent.chatId !== chat.id) {
           opponentNamesString = opponentNamesString + `${opponent?.name}, `;
         }
       }
