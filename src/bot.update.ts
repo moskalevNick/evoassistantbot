@@ -124,7 +124,7 @@ export class BotUpdate {
             'meetingWithColleague',
           ),
         ],
-        [Markup.button.callback('Общее совещание', 'generalMeeting')],
+        [Markup.button.callback('Общее совещание', 'requestMeeting-0')],
         [
           Markup.button.callback(
             `Запрос списка планируемых со мной совещаний`,
@@ -164,31 +164,35 @@ export class BotUpdate {
     }
   }
 
-  @Action('generalMeeting')
-  async generalMeeting(ctx: Context) {
-    const chat = await ctx.getChat();
-
-    await this.bot.telegram.sendMessage(chat.id, 'Напишите тему совещания');
-
-    this.isGeneralMeetingTheme = true;
-    this.requestMeetFrom = chat;
-
-    // this.bot.on(message(), async (ctx: any) => {
-
-    // });
-  }
-
   @Action(/^requestAddToGeneralMeeting-(\d+)$/)
   async requestAddToGeneralMeeting(ctx: any) {
     const chat = await ctx.getChat();
-
-    this.requestMeetToChatId = ctx.match[1];
 
     const currentMeeting = await this.prisma.meeting.findFirst({
       where: {
         id: this.generalMeet.id,
       },
     });
+
+    if (ctx.match[1] === 0) {
+      await this.bot.telegram.sendMessage(
+        chat.id,
+        `<b>Совещание ${currentMeeting.start_time.toLocaleDateString('ru-RU', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })}</b>
+          \n<b>Тема</b>: ${currentMeeting.topic}
+          \n<b>Cсылка</b>: <a href="${currentMeeting.start_url}">🔗</a>`,
+        { parse_mode: 'HTML' },
+      );
+      return;
+    }
+
+    this.requestMeetToChatId = ctx.match[1];
 
     const currentUser = await this.prisma.user.findFirst({
       where: {
@@ -258,11 +262,24 @@ export class BotUpdate {
   async requestMeeting(ctx: any) {
     const chat = await ctx.getChat();
 
-    this.requestMeetToChatId = ctx.match[1];
+    if (ctx.match[1] === '0') {
+      await this.bot.telegram.sendMessage(
+        chat.id,
+        'Напишите тему общего совещания: ',
+      );
 
-    await this.bot.telegram.sendMessage(chat.id, 'Напишите тему совещания');
+      this.requestMeetFrom = chat;
+      this.isGeneralMeetingTheme = true;
+    } else {
+      await this.bot.telegram.sendMessage(
+        chat.id,
+        'Напишите тему совещания с коллегой: ',
+      );
 
-    this.isMeetingTheme = true;
+      this.isMeetingTheme = true;
+
+      this.requestMeetToChatId = ctx.match[1];
+    }
 
     this.bot.on(message(), async (ctx: any) => {
       const chat = await ctx.getChat();
@@ -290,14 +307,36 @@ export class BotUpdate {
           const dateTimeArr = this.rawDate.split(' ');
           const timeArr = dateTimeArr[2].split(':');
 
+          const days_in_month =
+            32 -
+            new Date(
+              new Date().getFullYear(),
+              this.monthArr.indexOf(dateTimeArr[1]),
+              32,
+            ).getDate();
+
+          if (days_in_month < Number(dateTimeArr[0])) {
+            await this.bot.telegram.sendMessage(
+              this.requestMeetFrom.id,
+              `Неправильное число месяца`,
+            );
+            return;
+          }
+
+          if (Number(timeArr[0]) > 23 || Number(timeArr[1]) > 59) {
+            await this.bot.telegram.sendMessage(
+              this.requestMeetFrom.id,
+              `Неправильное значение времени`,
+            );
+            return;
+          }
+
           this.readableDate = new Date(
             Number(new Date().getFullYear()),
             Number(this.monthArr.indexOf(dateTimeArr[1])),
             Number(dateTimeArr[0]),
           ).setHours(Number(timeArr[0]) + 3, Number(timeArr[1]));
         } catch (e) {
-          console.log('415');
-
           await this.bot.telegram.sendMessage(chat.id, `Неверный формат даты`);
           return;
         }
@@ -307,8 +346,7 @@ export class BotUpdate {
         } else {
           this.requestMeetFrom = chat;
 
-          this.isFirstRequest = false;
-          return this.bot.telegram.sendMessage(
+          await this.bot.telegram.sendMessage(
             chat.id,
             `Выберите формат: `,
             Markup.inlineKeyboard([
@@ -322,6 +360,8 @@ export class BotUpdate {
             ]),
           );
         }
+        this.isFirstRequest = false;
+        return;
       } else if (this.isSecondRequest) {
         this.rawDate = ctx.update.message.text;
 
@@ -329,14 +369,36 @@ export class BotUpdate {
           const dateTimeArr = this.rawDate.split(' ');
           const timeArr = dateTimeArr[2].split(':');
 
+          const days_in_month =
+            32 -
+            new Date(
+              new Date().getFullYear(),
+              this.monthArr.indexOf(dateTimeArr[1]),
+              32,
+            ).getDate();
+
+          if (days_in_month < Number(dateTimeArr[0])) {
+            await this.bot.telegram.sendMessage(
+              this.requestMeetToChatId,
+              `Неправильное число месяца`,
+            );
+            return;
+          }
+
+          if (Number(timeArr[0]) > 23 || Number(timeArr[1]) > 59) {
+            await this.bot.telegram.sendMessage(
+              this.requestMeetToChatId,
+              `Неправильное значение времени`,
+            );
+            return;
+          }
+
           this.readableDate = new Date(
             Number(new Date().getFullYear()),
             Number(this.monthArr.indexOf(dateTimeArr[1])),
             Number(dateTimeArr[0]),
           ).setHours(Number(timeArr[0]) + 3, Number(timeArr[1]));
         } catch (e) {
-          console.log('450');
-
           await this.bot.telegram.sendMessage(chat.id, `Неверный формат даты`);
           return;
         }
@@ -391,12 +453,11 @@ export class BotUpdate {
           this.isGeneralMeetingDate = true;
           return;
         } else if (this.isGeneralMeetingDate) {
-          const newGeneralMeetingDate = ctx.update.message.text;
+          this.rawDate = ctx.update.message.text;
 
           try {
-            const dateTimeArr = newGeneralMeetingDate.split(' ');
+            const dateTimeArr = this.rawDate.split(' ');
             const timeArr = dateTimeArr[2].split(':');
-
             const days_in_month =
               32 -
               new Date(
@@ -413,7 +474,7 @@ export class BotUpdate {
               return;
             }
 
-            if (timeArr[0] > 23 || timeArr[1] > 59) {
+            if (Number(timeArr[0]) > 23 || Number(timeArr[1]) > 59) {
               await this.bot.telegram.sendMessage(
                 this.requestMeetFrom.id,
                 `Неправильное значение времени`,
@@ -427,8 +488,6 @@ export class BotUpdate {
               Number(dateTimeArr[0]),
             ).setHours(Number(timeArr[0]) + 3, Number(timeArr[1]));
           } catch (e) {
-            console.log('243');
-
             await this.bot.telegram.sendMessage(
               this.requestMeetFrom.id,
               `Неверный формат даты`,
@@ -579,9 +638,7 @@ export class BotUpdate {
 
     await this.bot.telegram.sendMessage(
       this.requestMeetFrom.id,
-      `Вас приглашает ${chat.first_name} ${
-        chat.last_name ? chat.last_name : ''
-      }на совещание:\n${newMeet.start_url}`,
+      `Ссылка на совещание:\n${newMeet.start_url}`,
     );
     return;
   }
