@@ -34,6 +34,7 @@ export class BotUpdate {
   private isFirstRequest: boolean;
   private isSecondRequest: boolean;
   private isMeetingTheme: boolean;
+  private isOfflineMeeting: boolean;
   private isGeneralMeetingTheme: boolean;
   private isGeneralMeetingDate: boolean;
   private meetingTheme: string;
@@ -141,7 +142,9 @@ export class BotUpdate {
     const chat = await ctx.getChat();
 
     // const collegues: User[] = await this.prisma.user.findMany();
-    const users: User[] = await this.prisma.user.findMany();
+    const users: User[] = await this.prisma.user.findMany({
+      orderBy: { name: 'asc' },
+    });
     const collegues = users.filter((collegue) => collegue.chatId !== chat.id);
 
     if (collegues.length) {
@@ -411,7 +414,16 @@ export class BotUpdate {
             this.requestMeetFrom.id,
             `В ответ на ваш запрос предложено время ${this.rawDate}`,
             Markup.inlineKeyboard([
-              [Markup.button.callback(`Принять`, `createMeeting`)],
+              [
+                Markup.button.callback(
+                  `Принять`,
+                  `${
+                    this.isOfflineMeeting
+                      ? 'createOfflineMeeting'
+                      : 'createMeeting'
+                  }`,
+                ),
+              ],
               [
                 Markup.button.callback(
                   `Отклонить`,
@@ -423,8 +435,11 @@ export class BotUpdate {
         }
 
         this.isSecondRequest = false;
+        this.isOfflineMeeting = false;
       } else {
-        const users: User[] = await this.prisma.user.findMany();
+        const users: User[] = await this.prisma.user.findMany({
+          orderBy: { name: 'asc' },
+        });
 
         let collegues = users.filter((collegue) => collegue.chatId !== chat.id);
 
@@ -548,9 +563,17 @@ export class BotUpdate {
   async sendRequestToOpponent(ctx: any) {
     const chat = await ctx.getChat();
 
+    const chatFrom = await this.prisma.user.findFirst({
+      where: {
+        chatId: this.requestMeetFrom.id,
+      },
+    });
+
     await this.bot.telegram.sendMessage(
       this.requestMeetToChatId,
-      `Пользователь ${this.requestMeetFrom.username} просит zoom-конференции ${this.rawDate}`,
+      `Пользователь ${
+        chatFrom ? chatFrom.name : this.requestMeetFrom.username
+      } просит zoom-конференции ${this.rawDate}`,
       Markup.inlineKeyboard([
         [Markup.button.callback(`Принять`, `createMeeting`)],
         [
@@ -578,15 +601,31 @@ export class BotUpdate {
   async requestOfflineMeeting(ctx: any) {
     const chat = await ctx.getChat();
 
+    this.isOfflineMeeting = true;
+
+    const nameFrom = await this.prisma.user.findFirst({
+      where: {
+        chatId: this.requestMeetFrom.id,
+      },
+    });
+
     await this.bot.telegram.sendMessage(
       this.requestMeetToChatId,
-      `Пользователь ${this.requestMeetFrom.username} просит личную встречу ${this.rawDate}`,
+      `Пользователь ${
+        nameFrom ? nameFrom.name : this.requestMeetFrom.username
+      } просит личную встречу ${this.rawDate}`,
       Markup.inlineKeyboard([
         [Markup.button.callback(`Принять`, `createOfflineMeeting`)],
         [
           Markup.button.callback(
             `Отклонить`,
             `rejectMeeting-${this.requestMeetFrom.id}`,
+          ),
+        ],
+        [
+          Markup.button.callback(
+            `Предложить другое время`,
+            `requestAnotherTime`,
           ),
         ],
       ]),
