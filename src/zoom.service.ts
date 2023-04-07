@@ -38,6 +38,7 @@ export class ZoomService {
       timezone: 'Europe/Minsk',
       topic,
     });
+    console.log(newMeet);
 
     const currentUserIDs = [];
 
@@ -55,7 +56,7 @@ export class ZoomService {
       topic: newMeet.topic,
       start_time: newMeet.start_time,
       duration: newMeet.duration,
-      start_url: newMeet.start_url,
+      join_url: newMeet.join_url,
       userIDs: currentUserIDs,
     };
 

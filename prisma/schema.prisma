@@ -23,7 +23,7 @@ model Meeting {
   topic      String    @db.String
   start_time DateTime? @db.Date
   duration   Float?    @default(40) @db.Double
-  start_url  String?   @db.String
+  join_url   String?   @db.String
 
   userIDs String[] @db.ObjectId
   users   User[]   @relation(fields: [userIDs], references: [id])

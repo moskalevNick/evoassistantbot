@@ -189,7 +189,7 @@ export class BotUpdate {
           minute: '2-digit',
         })}</b>
           \n<b>Тема</b>: ${currentMeeting.topic}
-          \n<b>Cсылка</b>: <a href="${currentMeeting.start_url}">🔗</a>`,
+          \n<b>Cсылка</b>: <a href="${currentMeeting.join_url}">🔗</a>`,
         { parse_mode: 'HTML' },
       );
       return;
@@ -228,7 +228,7 @@ export class BotUpdate {
           minute: '2-digit',
         })}</b>
         \n<b>Тема</b>: ${currentMeeting.topic}
-        \n<b>Cсылка</b>: <a href="${currentMeeting.start_url}">🔗</a>`,
+        \n<b>Cсылка</b>: <a href="${currentMeeting.join_url}">🔗</a>`,
         { parse_mode: 'HTML' },
       );
     }
@@ -255,7 +255,7 @@ export class BotUpdate {
         minute: '2-digit',
       })}</b>
         \n<b>Тема</b>: ${currentMeeting.topic}
-        \n<b>Cсылка</b>: <a href="${currentMeeting.start_url}">🔗</a>`,
+        \n<b>Cсылка</b>: <a href="${currentMeeting.join_url}">🔗</a>`,
       { parse_mode: 'HTML' },
     );
     return;
@@ -659,7 +659,7 @@ export class BotUpdate {
         setTimeout(async () => {
           await this.bot.telegram.sendMessage(
             this.requestMeetToChatId,
-            `До совещания остался 1 час. \n${newMeet.start_url}`,
+            `До совещания остался 1 час. \n${newMeet.join_url}`,
           );
         }, timeToRemind);
         console.log('set timeout');
@@ -672,12 +672,12 @@ export class BotUpdate {
 
     await this.bot.telegram.sendMessage(
       this.requestMeetToChatId,
-      `Ссылка на совещание:\n${newMeet.start_url}`,
+      `Ссылка на совещание:\n${newMeet.join_url}`,
     );
 
     await this.bot.telegram.sendMessage(
       this.requestMeetFrom.id,
-      `Ссылка на совещание:\n${newMeet.start_url}`,
+      `Ссылка на совещание:\n${newMeet.join_url}`,
     );
     return;
   }
@@ -822,8 +822,8 @@ export class BotUpdate {
         })}</b>
           \nТема: ${meeting.topic}
           \n${
-            meeting.start_url
-              ? `Cсылка: <a href="${meeting.start_url}">🔗</a>`
+            meeting.join_url
+              ? `Cсылка: <a href="${meeting.join_url}">🔗</a>`
               : 'Личная встреча'
           }\n\n\n`;
     }
