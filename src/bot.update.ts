@@ -39,6 +39,7 @@ export class BotUpdate {
   private isGeneralMeetingTheme: boolean;
   private isGeneralMeetingDate: boolean;
   private isFeedback: boolean;
+  // private isEditTime: boolean;
   private meetingTheme: string;
   private generalMeetingTheme: string;
   private generalMeet: Meeting;
@@ -879,10 +880,52 @@ export class BotUpdate {
           : 'Личная встреча'
       }\n\n\n`,
         {
+          reply_markup: {
+            inline_keyboard: [
+              // [
+              //   Markup.button.callback(
+              //     'Изменить время',
+              //     `editMeet-${meeting.id}`,
+              //   ),
+              // ],
+              [Markup.button.callback('Удалить', `removeMeet-${meeting.id}`)],
+            ],
+          },
           parse_mode: 'HTML',
         },
       );
     }
+  }
+
+  // @Action(/^editMeet-(\w+)$/)
+  // async editMeet(ctx: any) {
+  //   const chat = await ctx.getChat();
+
+  //   const meetingID = ctx.match[1];
+
+  //   console.log(meetingID);
+
+  //   return;
+  // }
+
+  @Action(/^removeMeet-(\w+)$/)
+  async removeMeet(ctx: any) {
+    const chat = await ctx.getChat();
+
+    const meetingID = ctx.match[1];
+    try {
+      const deletedMeeting = await this.zoomService.removeMeet(meetingID);
+
+      await this.bot.telegram.sendMessage(
+        chat.id,
+        `Встреча ${deletedMeeting.topic} удалена`,
+      );
+    } catch (e) {
+      console.log(e);
+
+      await this.bot.telegram.sendMessage(chat.id, 'Проблема с удалением');
+    }
+    return;
   }
 
   //ideas bot

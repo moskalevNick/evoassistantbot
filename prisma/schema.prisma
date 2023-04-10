@@ -26,6 +26,7 @@ model Meeting {
   join_url      String?   @db.String
   start_url     String?   @db.String
   creatorChatID Float?    @unique @db.Double
+  zoomId        String?   @db.String
 
   userIDs String[] @db.ObjectId
   users   User[]   @relation(fields: [userIDs], references: [id])

@@ -61,6 +61,7 @@ export class ZoomService {
       start_url: newMeet.start_url,
       userIDs: currentUserIDs,
       creatorChatID,
+      zoomId: `${newMeet.id}`,
     };
 
     return this.prisma.meeting.create({
@@ -92,6 +93,27 @@ export class ZoomService {
     await this.prisma.meeting.update({
       where: { id: meetingId },
       data: { ...data },
+    });
+  }
+
+  async removeMeet(meetingID: string) {
+    const client = zoomApi({
+      apiKey: process.env.ZOOM_API_KEY,
+      apiSecret: process.env.ZOOM_API_SECRET,
+    });
+
+    const currentMeet = await this.prisma.meeting.findFirst({
+      where: { id: meetingID },
+    });
+
+    if (currentMeet.start_url) {
+      await client.meetings.DeleteMeeting(currentMeet.zoomId);
+    }
+
+    return this.prisma.meeting.delete({
+      where: {
+        id: meetingID,
+      },
     });
   }
 }
