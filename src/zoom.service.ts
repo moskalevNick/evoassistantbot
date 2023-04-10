@@ -8,6 +8,7 @@ type zoomServiceType = {
   duration?: number;
   userChatIds: number[];
   topic: string;
+  creatorChatID?: number;
 };
 
 type zoomServiceEditType = {
@@ -26,6 +27,7 @@ export class ZoomService {
     duration = 40,
     userChatIds,
     topic,
+    creatorChatID,
   }: zoomServiceType) {
     const client = zoomApi({
       apiKey: process.env.ZOOM_API_KEY,
@@ -38,7 +40,6 @@ export class ZoomService {
       timezone: 'Europe/Minsk',
       topic,
     });
-    console.log(newMeet);
 
     const currentUserIDs = [];
 
@@ -57,7 +58,9 @@ export class ZoomService {
       start_time: newMeet.start_time,
       duration: newMeet.duration,
       join_url: newMeet.join_url,
+      start_url: newMeet.start_url,
       userIDs: currentUserIDs,
+      creatorChatID,
     };
 
     return this.prisma.meeting.create({

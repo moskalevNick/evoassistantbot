@@ -19,11 +19,13 @@ model User {
 }
 
 model Meeting {
-  id         String    @id @default(auto()) @map("_id") @db.ObjectId
-  topic      String    @db.String
-  start_time DateTime? @db.Date
-  duration   Float?    @default(40) @db.Double
-  join_url   String?   @db.String
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  topic         String    @db.String
+  start_time    DateTime? @db.Date
+  duration      Float?    @default(40) @db.Double
+  join_url      String?   @db.String
+  start_url     String?   @db.String
+  creatorChatID Float?    @unique @db.Double
 
   userIDs String[] @db.ObjectId
   users   User[]   @relation(fields: [userIDs], references: [id])

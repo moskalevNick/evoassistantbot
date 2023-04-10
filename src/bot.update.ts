@@ -4,6 +4,7 @@ import { message } from 'telegraf/filters';
 import { Context, Telegraf, Markup } from 'telegraf';
 import { ZoomService } from './zoom.service';
 import { PrismaService } from './prisma/prisma.service';
+import { google } from 'googleapis';
 require('dotenv').config();
 
 @Update()
@@ -37,9 +38,11 @@ export class BotUpdate {
   private isOfflineMeeting: boolean;
   private isGeneralMeetingTheme: boolean;
   private isGeneralMeetingDate: boolean;
+  private isFeedback: boolean;
   private meetingTheme: string;
   private generalMeetingTheme: string;
   private generalMeet: Meeting;
+  private currentProject: string;
 
   @Action('start')
   @Command('start')
@@ -57,6 +60,7 @@ export class BotUpdate {
         // [Markup.button.callback(`Добавить лид`, 'addLead')],
         // [Markup.button.callback('Добавить сделку', 'addDeal')],
         [Markup.button.callback('Совещания', 'meetings')],
+        [Markup.button.callback('Оставить отзыв', 'sendfeedback')],
         // [
         //   Markup.button.callback(
         //     'Узнать статус проекта в сборке',
@@ -67,226 +71,44 @@ export class BotUpdate {
         [Markup.button.callback('Запрос ID чата', 'getChatID')],
       ]),
     );
-  }
-
-  @Command('getchatid')
-  @Action('getChatID')
-  async getChatID(ctx: Context) {
-    const chat = await ctx.getChat();
-    await this.bot.telegram.sendMessage(chat.id, `Ваш ID чата: ${chat.id}`);
-  }
-
-  @Command('addlead')
-  @Action('addLead')
-  async addLead(ctx: Context) {
-    const chat = await ctx.getChat();
-
-    await this.bot.telegram.sendMessage(
-      chat.id,
-      'Добавление лида: ',
-      Markup.inlineKeyboard([
-        [Markup.button.callback(`Новый партнёр`, 'addPartner')],
-        [Markup.button.callback(`Корпоративный конечник`, 'addCorporate')],
-        [Markup.button.callback(`Частный конечник`, 'addPartial')],
-        [Markup.button.callback(`Назад`, 'start')],
-      ]),
-    );
-  }
-
-  @Action('addPartner')
-  async sendFeedback(ctx: Context) {
-    const chat = await ctx.getChat();
-
-    await this.bot.telegram.sendMessage(
-      chat.id,
-      'Добавление партнёра: ',
-      Markup.inlineKeyboard([
-        [Markup.button.callback(`Новый интегратор`, 'addIntegrator')],
-        [Markup.button.callback(`Новый агент`, 'addAgent')],
-        [Markup.button.callback(`Новый дилер`, 'addDealer')],
-        [Markup.button.callback(`Запрос на интеграцию`, 'addIntegration')],
-        [Markup.button.callback(`Назад`, 'addLead')],
-      ]),
-    );
-  }
-
-  @Command('meetings')
-  @Action('meetings')
-  async meetings(ctx: Context) {
-    const chat = await ctx.getChat();
-
-    await this.bot.telegram.sendMessage(
-      chat.id,
-      'Совещания: ',
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback(
-            `Консультация с коллегой`,
-            'meetingWithColleague',
-          ),
-        ],
-        [Markup.button.callback('Общее совещание', 'requestMeeting-0')],
-        [
-          Markup.button.callback(
-            `Запрос списка планируемых со мной совещаний`,
-            'listOfMeetings',
-          ),
-        ],
-        [Markup.button.callback(`Назад`, 'start')],
-      ]),
-    );
-  }
-
-  @Action('meetingWithColleague')
-  async meetingWithColleague(ctx: Context) {
-    const chat = await ctx.getChat();
-
-    // const collegues: User[] = await this.prisma.user.findMany();
-    const users: User[] = await this.prisma.user.findMany({
-      orderBy: { name: 'asc' },
-    });
-    const collegues = users.filter((collegue) => collegue.chatId !== chat.id);
-
-    if (collegues.length) {
-      await this.bot.telegram.sendMessage(
-        chat.id,
-        'Сделайте выбор: ',
-        Markup.inlineKeyboard(
-          collegues.map((collegue) =>
-            Array(
-              Markup.button.callback(
-                `${collegue.name}`,
-                `requestMeeting-${collegue.chatId}`,
-              ),
-            ),
-          ),
-        ),
-      );
-    } else {
-      await this.bot.telegram.sendMessage(chat.id, 'Коллеги не найдены');
-    }
-  }
-
-  @Action(/^requestAddToGeneralMeeting-(\d+)$/)
-  async requestAddToGeneralMeeting(ctx: any) {
-    const chat = await ctx.getChat();
-
-    const currentMeeting = await this.prisma.meeting.findFirst({
-      where: {
-        id: this.generalMeet.id,
-      },
-    });
-
-    if (ctx.match[1] === 0) {
-      await this.bot.telegram.sendMessage(
-        chat.id,
-        `<b>Совещание ${currentMeeting.start_time.toLocaleDateString('ru-RU', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })}</b>
-          \n<b>Тема</b>: ${currentMeeting.topic}
-          \n<b>Cсылка</b>: <a href="${currentMeeting.join_url}">🔗</a>`,
-        { parse_mode: 'HTML' },
-      );
-      return;
-    }
-
-    this.requestMeetToChatId = ctx.match[1];
-
-    const currentUser = await this.prisma.user.findFirst({
-      where: {
-        chatId: Number(this.requestMeetToChatId),
-      },
-    });
-
-    if (currentMeeting) {
-      await this.zoomService.editMeet({
-        meetingId: this.generalMeet.id,
-        userIDs: [...currentMeeting.userIDs, currentUser.id],
-      });
-
-      await this.bot.telegram.sendMessage(
-        chat.id,
-        `${currentUser.name} добавлен на совещание на тему ${currentMeeting.topic}`,
-      );
-
-      await this.bot.telegram.sendMessage(
-        currentUser.chatId,
-        `<b>Вас добавили на совещание ${currentMeeting.start_time.toLocaleDateString(
-          'ru-RU',
-          {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          },
-        )} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
-          hour: '2-digit',
-          minute: '2-digit',
-        })}</b>
-        \n<b>Тема</b>: ${currentMeeting.topic}
-        \n<b>Cсылка</b>: <a href="${currentMeeting.join_url}">🔗</a>`,
-        { parse_mode: 'HTML' },
-      );
-    }
-  }
-
-  @Action('getLinkGeneralMeeting')
-  async getLinkGeneralMeeting(ctx: any) {
-    const chat = await ctx.getChat();
-
-    const currentMeeting = await this.prisma.meeting.findFirst({
-      where: {
-        id: this.generalMeet.id,
-      },
-    });
-
-    await this.bot.telegram.sendMessage(
-      chat.id,
-      `<b>Совещание ${currentMeeting.start_time.toLocaleDateString('ru-RU', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
-        hour: '2-digit',
-        minute: '2-digit',
-      })}</b>
-        \n<b>Тема</b>: ${currentMeeting.topic}
-        \n<b>Cсылка</b>: <a href="${currentMeeting.join_url}">🔗</a>`,
-      { parse_mode: 'HTML' },
-    );
-    return;
-  }
-
-  @Action(/^requestMeeting-(\d+)$/)
-  async requestMeeting(ctx: any) {
-    const chat = await ctx.getChat();
-
-    if (ctx.match[1] === '0') {
-      await this.bot.telegram.sendMessage(
-        chat.id,
-        'Напишите тему общего совещания: ',
-      );
-
-      this.requestMeetFrom = chat;
-      this.isGeneralMeetingTheme = true;
-    } else {
-      await this.bot.telegram.sendMessage(
-        chat.id,
-        'Напишите тему совещания с коллегой: ',
-      );
-
-      this.isMeetingTheme = true;
-
-      this.requestMeetToChatId = ctx.match[1];
-    }
 
     this.bot.on(message(), async (ctx: any) => {
       const chat = await ctx.getChat();
-      if (this.isMeetingTheme) {
+      if (this.isFeedback) {
+        const newFeedbackText = ctx.update.message.text;
+
+        let from = `${ctx.update.message.from.username} ${ctx.update.message.from.first_name}`;
+
+        if (ctx.update.message.from.last_name) {
+          from = `${from} ${ctx.update.message.from.last_name}`;
+        }
+
+        const auth = new google.auth.GoogleAuth({
+          keyFile: 'credentials.json',
+          scopes: 'https://www.googleapis.com/auth/spreadsheets',
+        });
+
+        const client = await auth.getClient();
+
+        const googleSheets = google.sheets({ version: 'v4', auth: client });
+
+        const spreadsheetId = '1fQOFenTyu1rvZqoNl23T6hK0uRsDQHjoxQv5AZQhi50';
+
+        await googleSheets.spreadsheets.values.append({
+          auth,
+          spreadsheetId,
+          range: this.currentProject,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: {
+            values: [[from, newFeedbackText]],
+          },
+        });
+
+        this.isFeedback = false;
+        return ctx.reply(
+          `Ваше предложение для ${this.currentProject} сохранено`,
+        );
+      } else if (this.isMeetingTheme) {
         this.meetingTheme = ctx.update.message.text;
 
         await this.bot.telegram.sendMessage(
@@ -520,6 +342,7 @@ export class BotUpdate {
               start_time: this.readableDate,
               userChatIds: [this.requestMeetFrom.id],
               topic: this.generalMeetingTheme,
+              creatorChatID: this.requestMeetFrom.id,
             });
 
             this.generalMeet = newMeet;
@@ -557,6 +380,226 @@ export class BotUpdate {
       this.isSecondRequest = false;
       this.isMeetingTheme = false;
     });
+  }
+
+  @Command('getchatid')
+  @Action('getChatID')
+  async getChatID(ctx: Context) {
+    const chat = await ctx.getChat();
+    await this.bot.telegram.sendMessage(chat.id, `Ваш ID чата: ${chat.id}`);
+  }
+
+  @Command('addlead')
+  @Action('addLead')
+  async addLead(ctx: Context) {
+    const chat = await ctx.getChat();
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      'Добавление лида: ',
+      Markup.inlineKeyboard([
+        [Markup.button.callback(`Новый партнёр`, 'addPartner')],
+        [Markup.button.callback(`Корпоративный конечник`, 'addCorporate')],
+        [Markup.button.callback(`Частный конечник`, 'addPartial')],
+        [Markup.button.callback(`Назад`, 'start')],
+      ]),
+    );
+  }
+
+  @Action('addPartner')
+  async addPartner(ctx: Context) {
+    const chat = await ctx.getChat();
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      'Добавление партнёра: ',
+      Markup.inlineKeyboard([
+        [Markup.button.callback(`Новый интегратор`, 'addIntegrator')],
+        [Markup.button.callback(`Новый агент`, 'addAgent')],
+        [Markup.button.callback(`Новый дилер`, 'addDealer')],
+        [Markup.button.callback(`Запрос на интеграцию`, 'addIntegration')],
+        [Markup.button.callback(`Назад`, 'addLead')],
+      ]),
+    );
+  }
+
+  @Command('meetings')
+  @Action('meetings')
+  async meetings(ctx: Context) {
+    const chat = await ctx.getChat();
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      'Совещания: ',
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            `Консультация с коллегой`,
+            'meetingWithColleague',
+          ),
+        ],
+        [Markup.button.callback('Общее совещание', 'requestMeeting-0')],
+        [
+          Markup.button.callback(
+            `Запрос списка планируемых со мной совещаний`,
+            'listOfMeetings',
+          ),
+        ],
+        [Markup.button.callback(`Назад`, 'start')],
+      ]),
+    );
+  }
+
+  @Action('meetingWithColleague')
+  async meetingWithColleague(ctx: Context) {
+    const chat = await ctx.getChat();
+
+    // const collegues: User[] = await this.prisma.user.findMany();
+    const users: User[] = await this.prisma.user.findMany({
+      orderBy: { name: 'asc' },
+    });
+    const collegues = users.filter((collegue) => collegue.chatId !== chat.id);
+
+    if (collegues.length) {
+      await this.bot.telegram.sendMessage(
+        chat.id,
+        'Сделайте выбор: ',
+        Markup.inlineKeyboard(
+          collegues.map((collegue) =>
+            Array(
+              Markup.button.callback(
+                `${collegue.name}`,
+                `requestMeeting-${collegue.chatId}`,
+              ),
+            ),
+          ),
+        ),
+      );
+    } else {
+      await this.bot.telegram.sendMessage(chat.id, 'Коллеги не найдены');
+    }
+  }
+
+  @Action(/^requestAddToGeneralMeeting-(\d+)$/)
+  async requestAddToGeneralMeeting(ctx: any) {
+    const chat = await ctx.getChat();
+
+    const currentMeeting = await this.prisma.meeting.findFirst({
+      where: {
+        id: this.generalMeet.id,
+      },
+    });
+
+    if (ctx.match[1] === 0) {
+      await this.bot.telegram.sendMessage(
+        chat.id,
+        `<b>Совещание ${currentMeeting.start_time.toLocaleDateString('ru-RU', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })}</b>
+          \n<b>Тема</b>: ${currentMeeting.topic}
+          \n<b>Cсылка</b>: <a href="${currentMeeting.start_url}">🔗</a>`,
+        { parse_mode: 'HTML' },
+      );
+      return;
+    }
+
+    this.requestMeetToChatId = ctx.match[1];
+
+    const currentUser = await this.prisma.user.findFirst({
+      where: {
+        chatId: Number(this.requestMeetToChatId),
+      },
+    });
+
+    if (currentMeeting) {
+      await this.zoomService.editMeet({
+        meetingId: this.generalMeet.id,
+        userIDs: [...currentMeeting.userIDs, currentUser.id],
+      });
+
+      await this.bot.telegram.sendMessage(
+        chat.id,
+        `${currentUser.name} добавлен на совещание на тему ${currentMeeting.topic}`,
+      );
+
+      await this.bot.telegram.sendMessage(
+        currentUser.chatId,
+        `<b>Вас добавили на совещание ${currentMeeting.start_time.toLocaleDateString(
+          'ru-RU',
+          {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          },
+        )} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })}</b>
+        \n<b>Тема</b>: ${currentMeeting.topic}
+        \n<b>Cсылка</b>: <a href="${currentMeeting.join_url}">🔗</a>`,
+        { parse_mode: 'HTML' },
+      );
+    }
+  }
+
+  @Action('getLinkGeneralMeeting')
+  async getLinkGeneralMeeting(ctx: any) {
+    const chat = await ctx.getChat();
+
+    const currentMeeting = await this.prisma.meeting.findFirst({
+      where: {
+        id: this.generalMeet.id,
+      },
+    });
+
+    const isCreator = currentMeeting.creatorChatID === chat.id;
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `<b>Совещание ${currentMeeting.start_time.toLocaleDateString('ru-RU', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })} в ${currentMeeting.start_time.toLocaleTimeString('ru-RU', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}</b>
+        \n<b>Тема</b>: ${currentMeeting.topic}
+        \n<b>Cсылка для присоединения</b>: <a href="${
+          isCreator ? currentMeeting.start_url : currentMeeting.join_url
+        }">🔗</a>`,
+      { parse_mode: 'HTML' },
+    );
+    return;
+  }
+
+  @Action(/^requestMeeting-(\d+)$/)
+  async requestMeeting(ctx: any) {
+    const chat = await ctx.getChat();
+
+    if (ctx.match[1] === '0') {
+      await this.bot.telegram.sendMessage(
+        chat.id,
+        'Напишите тему общего совещания: ',
+      );
+
+      this.requestMeetFrom = chat;
+      this.isGeneralMeetingTheme = true;
+    } else {
+      await this.bot.telegram.sendMessage(
+        chat.id,
+        'Напишите тему совещания с коллегой: ',
+      );
+
+      this.isMeetingTheme = true;
+
+      this.requestMeetToChatId = ctx.match[1];
+    }
   }
 
   @Action('sendRequestToOpponent')
@@ -641,6 +684,12 @@ export class BotUpdate {
   async createMeeting(ctx: any) {
     const chat = await ctx.getChat();
 
+    const Creator = await this.prisma.user.findFirst({
+      where: {
+        chatId: chat.id,
+      },
+    });
+
     const newMeet = await this.zoomService.newMeeting({
       start_time: this.readableDate,
       userChatIds: [
@@ -648,6 +697,7 @@ export class BotUpdate {
         Number(this.requestMeetFrom.id),
       ],
       topic: this.meetingTheme,
+      creatorChatID: Creator.chatId,
     });
 
     const oneHour = 60 * 60 * 1000;
@@ -677,7 +727,7 @@ export class BotUpdate {
 
     await this.bot.telegram.sendMessage(
       this.requestMeetFrom.id,
-      `Ссылка на совещание:\n${newMeet.join_url}`,
+      `Ссылка на совещание:\n${newMeet.start_url}`,
     );
     return;
   }
@@ -789,8 +839,6 @@ export class BotUpdate {
       `У вас ${userMeetings.length} совещаний: `,
     );
 
-    let message: string = '';
-
     for (const [index, meeting] of userMeetings.entries()) {
       let opponentNamesString: string = '';
 
@@ -805,8 +853,10 @@ export class BotUpdate {
         }
       }
 
-      message =
-        message +
+      const isCreator = meeting.creatorChatID === currentUser.chatId;
+
+      await this.bot.telegram.sendMessage(
+        chat.id,
         `${
           index + 1
         }) <b>Совещание c ${opponentNamesString} ${meeting.start_time.toLocaleDateString(
@@ -820,17 +870,157 @@ export class BotUpdate {
           hour: '2-digit',
           minute: '2-digit',
         })}</b>
-          \nТема: ${meeting.topic}
-          \n${
-            meeting.join_url
-              ? `Cсылка: <a href="${meeting.join_url}">🔗</a>`
-              : 'Личная встреча'
-          }\n\n\n`;
+      \nТема: ${meeting.topic}
+      \n${
+        meeting.join_url
+          ? `Cсылка: <a href="${
+              isCreator ? meeting.start_url : meeting.join_url
+            }">🔗</a>`
+          : 'Личная встреча'
+      }\n\n\n`,
+        {
+          parse_mode: 'HTML',
+        },
+      );
     }
+  }
 
-    await this.bot.telegram.sendMessage(chat.id, message, {
-      parse_mode: 'HTML',
-    });
+  //ideas bot
+
+  @Command('sendfeedback')
+  @Action('sendfeedback')
+  async sendfeedback(ctx: Context) {
+    const chat = await ctx.getChat();
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `Наши проекты: `,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback(
+            `Интерфейс контроллера`,
+            'controllerInterface',
+          ),
+        ],
+        [Markup.button.callback('Облако', 'cloud')],
+        [Markup.button.callback('Софт для проектирования', 'softForGrafics')],
+        [Markup.button.callback('Распознавание лиц', 'faceRecognition')],
+        [Markup.button.callback('Мобильное приложение', 'mobileApp')],
+        [Markup.button.callback('Сайт evocontrols', 'evocontrolscom')],
+        [Markup.button.callback('Телеграм бот', 'telegramBot')],
+      ]),
+    );
+  }
+
+  @Action('controllerInterface')
+  async conrollerInterface(ctx: Context) {
+    const chat = await ctx.getChat();
+
+    this.currentProject = 'Интерфейс контроллера';
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `Этим проектом занимается Александр Макаров`,
+      Markup.inlineKeyboard([
+        Markup.button.callback(`Оставить пожелание`, 'sendFeedback'),
+      ]),
+    );
+  }
+
+  @Action('cloud')
+  async cloud(ctx: Context) {
+    const chat = await ctx.getChat();
+    this.currentProject = 'Облако';
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `Этим проектом занимается Александр Макаров`,
+      Markup.inlineKeyboard([
+        Markup.button.callback(`Оставить пожелание`, 'sendFeedback'),
+      ]),
+    );
+  }
+
+  @Action('softForGrafics')
+  async softForGrafics(ctx: Context) {
+    const chat = await ctx.getChat();
+    this.currentProject = 'Софт для проектирования';
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `Этим проектом занимается Александр Макаров`,
+      Markup.inlineKeyboard([
+        Markup.button.callback(`Оставить пожелание`, 'sendFeedback'),
+      ]),
+    );
+  }
+
+  @Action('faceRecognition')
+  async faceRecognition(ctx: Context) {
+    const chat = await ctx.getChat();
+    this.currentProject = 'Распознавание лиц';
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `Этим проектом занимается Николай Москалёв`,
+      Markup.inlineKeyboard([
+        Markup.button.callback(`Оставить пожелание`, 'sendFeedback'),
+      ]),
+    );
+  }
+
+  @Action('telegramBot')
+  async telegramBot(ctx: Context) {
+    const chat = await ctx.getChat();
+    this.currentProject = 'Телеграм бот';
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `Этим проектом занимается Николай Москалёв`,
+      Markup.inlineKeyboard([
+        Markup.button.callback(`Оставить пожелание`, 'sendFeedback'),
+      ]),
+    );
+  }
+
+  @Action('mobileApp')
+  async mobileApp(ctx: Context) {
+    const chat = await ctx.getChat();
+    this.currentProject = 'Мобильное приложение';
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `Этим проектом занимается Николай Москалёв`,
+      Markup.inlineKeyboard([
+        Markup.button.callback(`Оставить пожелание`, 'sendFeedback'),
+      ]),
+    );
+  }
+
+  @Action('evocontrolscom')
+  async evocontrolscom(ctx: Context) {
+    const chat = await ctx.getChat();
+    this.currentProject = 'Сайт evocontrols';
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `Этим проектом занимается Николай Москалёв`,
+      Markup.inlineKeyboard([
+        Markup.button.callback(`Оставить пожелание`, 'sendFeedback'),
+      ]),
+    );
+  }
+
+  @Action('sendFeedback')
+  async sendFeedback(ctx: Context) {
+    const chat = await ctx.getChat();
+
+    await this.bot.telegram.sendMessage(
+      chat.id,
+      `следующее сообщение будет сохранено как пожелание для проекта ${this.currentProject}`,
+    );
+
+    this.isFeedback = true;
   }
 
   @Command('adddeal')
