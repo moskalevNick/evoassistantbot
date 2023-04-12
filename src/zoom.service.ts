@@ -106,7 +106,7 @@ export class ZoomService {
       where: { id: meetingID },
     });
 
-    if (currentMeet.start_url) {
+    if (currentMeet && currentMeet.start_url) {
       await client.meetings.DeleteMeeting(currentMeet.zoomId);
     }
 

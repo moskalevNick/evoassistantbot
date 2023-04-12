@@ -684,7 +684,6 @@ export class BotUpdate {
   @Action('createMeeting')
   async createMeeting(ctx: any) {
     const chat = await ctx.getChat();
-
     const Creator = await this.prisma.user.findFirst({
       where: {
         chatId: chat.id,
