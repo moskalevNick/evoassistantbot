@@ -583,6 +583,12 @@ export class BotUpdate {
   async requestMeeting(ctx: any) {
     const chat = await ctx.getChat();
 
+    this.isMeetingTheme = false;
+    this.isGeneralMeetingTheme = false;
+    this.isFeedback = false;
+    this.isFirstRequest = false;
+    this.isSecondRequest = false;
+
     if (ctx.match[1] === '0') {
       await this.bot.telegram.sendMessage(
         chat.id,
@@ -591,10 +597,6 @@ export class BotUpdate {
 
       this.requestMeetFrom = chat;
       this.isGeneralMeetingTheme = true;
-      this.isFeedback = false;
-      this.isMeetingTheme = false;
-      this.isFirstRequest = false;
-      this.isSecondRequest = false;
     } else {
       await this.bot.telegram.sendMessage(
         chat.id,
@@ -602,11 +604,6 @@ export class BotUpdate {
       );
 
       this.isMeetingTheme = true;
-      this.isGeneralMeetingTheme = false;
-      this.isFeedback = false;
-      this.isFirstRequest = false;
-      this.isSecondRequest = false;
-
       this.requestMeetToChatId = ctx.match[1];
     }
   }
