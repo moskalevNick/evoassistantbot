@@ -591,6 +591,10 @@ export class BotUpdate {
 
       this.requestMeetFrom = chat;
       this.isGeneralMeetingTheme = true;
+      this.isFeedback = false;
+      this.isMeetingTheme = false;
+      this.isFirstRequest = false;
+      this.isSecondRequest = false;
     } else {
       await this.bot.telegram.sendMessage(
         chat.id,
@@ -598,6 +602,10 @@ export class BotUpdate {
       );
 
       this.isMeetingTheme = true;
+      this.isGeneralMeetingTheme = false;
+      this.isFeedback = false;
+      this.isFirstRequest = false;
+      this.isSecondRequest = false;
 
       this.requestMeetToChatId = ctx.match[1];
     }
@@ -734,8 +742,6 @@ export class BotUpdate {
 
   @Action('createOfflineMeeting')
   async createOfflineMeeting(ctx: any) {
-    const chat = await ctx.getChat();
-
     const userFrom = await this.prisma.user.findFirst({
       where: {
         chatId: Number(this.requestMeetFrom.id),
@@ -808,6 +814,10 @@ export class BotUpdate {
     );
 
     this.isSecondRequest = true;
+    this.isMeetingTheme = false;
+    this.isGeneralMeetingTheme = false;
+    this.isFeedback = false;
+    this.isFirstRequest = false;
     return;
   }
 
@@ -1063,6 +1073,10 @@ export class BotUpdate {
     );
 
     this.isFeedback = true;
+    this.isSecondRequest = false;
+    this.isMeetingTheme = false;
+    this.isGeneralMeetingTheme = false;
+    this.isFirstRequest = false;
   }
 
   @Command('adddeal')
